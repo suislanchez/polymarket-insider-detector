@@ -239,6 +239,7 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h1 className="text-3xl font-bold mb-1">Polymarket Insider Detector</h1>
+              <div className="text-xs text-gray-600">v2.0</div>
               <p className="text-gray-400">
                 Statistical analysis of trading patterns
                 {summary.dataSource && (
