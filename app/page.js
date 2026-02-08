@@ -254,7 +254,16 @@ export default function Dashboard() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold mb-1">Polymarket Insider Detector</h1>
-            <p className="text-gray-400">Statistical analysis of on-chain trading patterns</p>
+            <p className="text-gray-400">
+              Statistical analysis of on-chain trading patterns
+              {data?.summary?.dataSource && (
+                <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                  data.summary.dataSource === 'live' ? 'bg-green-900 text-green-400' : 'bg-yellow-900 text-yellow-400'
+                }`}>
+                  {data.summary.dataSource === 'live' ? 'LIVE DATA' : 'DEMO DATA'}
+                </span>
+              )}
+            </p>
           </div>
           <button
             onClick={handleRefresh}
