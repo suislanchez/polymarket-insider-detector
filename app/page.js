@@ -61,10 +61,14 @@ function WalletRow({ wallet, onClick }) {
         </span>
       </td>
       <td className="py-4 px-4 text-right">
-        {wallet.avgMinutesBefore < 30 ? (
-          <span className="text-red-400">{wallet.avgMinutesBefore.toFixed(0)}m</span>
+        {wallet.avgMinutesBefore != null ? (
+          wallet.avgMinutesBefore < 30 ? (
+            <span className="text-red-400">{wallet.avgMinutesBefore.toFixed(0)}m</span>
+          ) : (
+            <span className="text-gray-400">{wallet.avgMinutesBefore.toFixed(0)}m</span>
+          )
         ) : (
-          <span className="text-gray-400">{wallet.avgMinutesBefore.toFixed(0)}m</span>
+          <span className="text-gray-500">-</span>
         )}
       </td>
       <td className="py-4 px-4 text-right">
@@ -75,17 +79,8 @@ function WalletRow({ wallet, onClick }) {
 }
 
 function WalletModal({ wallet, onClose }) {
-  const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`/api/wallets/${wallet.address}`)
-      .then(r => r.json())
-      .then(data => {
-        setDetails(data);
-        setLoading(false);
-      });
-  }, [wallet.address]);
+  // Use the wallet data directly instead of fetching
+  const details = wallet;
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -98,88 +93,60 @@ function WalletModal({ wallet, onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
         </div>
 
-        {loading ? (
-          <div className="text-center py-8 text-gray-400">Loading...</div>
-        ) : details ? (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="text-gray-400 text-sm">Win Rate</div>
-                <div className="text-2xl font-bold">{(details.winRate * 100).toFixed(1)}%</div>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="text-gray-400 text-sm">P-Value</div>
-                <div className="text-2xl font-bold mono text-red-400">{formatPValue(details.pValue)}</div>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="text-gray-400 text-sm">Total PnL</div>
-                <div className={`text-2xl font-bold ${details.totalPnL > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ${formatNumber(Math.abs(details.totalPnL))}
-                </div>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="text-gray-400 text-sm">Suspicion</div>
-                <div className="text-2xl font-bold">
-                  <Badge level={details.suspicionLevel} />
-                </div>
-              </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="text-gray-400 text-sm">Win Rate</div>
+            <div className="text-2xl font-bold">{(details.winRate * 100).toFixed(1)}%</div>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="text-gray-400 text-sm">P-Value</div>
+            <div className="text-2xl font-bold mono text-red-400">{formatPValue(details.pValue)}</div>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="text-gray-400 text-sm">Total PnL</div>
+            <div className={`text-2xl font-bold ${details.totalPnL > 0 ? 'text-green-400' : 'text-red-400'}`}>
+              ${formatNumber(Math.abs(details.totalPnL))}
             </div>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="text-gray-400 text-sm">Suspicion</div>
+            <div className="text-2xl font-bold">
+              <Badge level={details.suspicionLevel} />
+            </div>
+          </div>
+        </div>
 
-            <div className="mb-4">
-              <div className="flex items-center gap-4 text-sm text-gray-400 mb-2">
-                <span>Avg. {details.avgMinutesBefore?.toFixed(1)} min before resolution</span>
-                <span>|</span>
-                <span>{(details.lastMinuteRatio * 100).toFixed(0)}% trades in last 30 min</span>
-                <span>|</span>
-                <span>Score: {details.suspicionScore}/14</span>
-              </div>
-            </div>
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 mb-2">
+            <span>Trades: {details.trades}</span>
+            <span>|</span>
+            <span>Wins: {details.wins} / Losses: {details.losses}</span>
+            <span>|</span>
+            <span>Score: {details.suspicionScore}/10</span>
+          </div>
+        </div>
 
-            <h3 className="font-bold mb-3">Recent Trades</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-gray-400 text-left border-b border-gray-700">
-                    <th className="pb-2">Market</th>
-                    <th className="pb-2 text-right">Side</th>
-                    <th className="pb-2 text-right">Amount</th>
-                    <th className="pb-2 text-right">Price</th>
-                    <th className="pb-2 text-right">Before Resolution</th>
-                    <th className="pb-2 text-right">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {details.trades?.slice(0, 20).map((t, i) => {
-                    const won = (t.side === 'buy' && t.marketOutcome === 'YES') ||
-                                (t.side === 'sell' && t.marketOutcome === 'NO');
-                    return (
-                      <tr key={i} className="border-b border-gray-800">
-                        <td className="py-2 max-w-[200px] truncate">{t.marketQuestion}</td>
-                        <td className="py-2 text-right">
-                          <span className={t.side === 'buy' ? 'text-green-400' : 'text-red-400'}>
-                            {t.side.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-2 text-right">${formatNumber(t.amount)}</td>
-                        <td className="py-2 text-right">{(t.price * 100).toFixed(0)}c</td>
-                        <td className="py-2 text-right">
-                          <span className={t.minutesBefore < 30 ? 'text-red-400' : ''}>
-                            {t.minutesBefore?.toFixed(0)}m
-                          </span>
-                        </td>
-                        <td className="py-2 text-right">
-                          <span className={won ? 'text-green-400' : 'text-red-400'}>
-                            {won ? 'WIN' : 'LOSS'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="font-bold mb-2">Analysis Details</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-400">Total Stake:</span>
+              <span className="ml-2">${formatNumber(details.totalStake || 0)}</span>
             </div>
-          </>
-        ) : null}
+            <div>
+              <span className="text-gray-400">ROI:</span>
+              <span className={`ml-2 ${details.roi > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {((details.roi || 0) * 100).toFixed(1)}%
+              </span>
+            </div>
+            {details.username && (
+              <div className="col-span-2">
+                <span className="text-gray-400">Username:</span>
+                <span className="ml-2">{details.username}</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
