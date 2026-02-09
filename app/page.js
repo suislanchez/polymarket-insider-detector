@@ -954,7 +954,13 @@ export default function Dashboard() {
 
   const filteredAndSortedWallets = useMemo(() => {
     let result = wallets.filter(w => {
-      if (filter !== 'all' && w.suspicionLevel !== filter) return false;
+      // Special filters
+      if (filter === 'whales' && !w.isWhale) return false;
+      if (filter === 'clusters' && (!w.cluster || w.clusterSize <= 1)) return false;
+      if (filter === 'pre-res' && !w.preResolutionTrades) return false;
+      // Risk level filters
+      if (['critical', 'high', 'medium', 'low'].includes(filter) && w.suspicionLevel !== filter) return false;
+
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return w.address?.toLowerCase().includes(query) ||
@@ -1005,6 +1011,9 @@ export default function Dashboard() {
     high: wallets.filter(w => w.suspicionLevel === 'high').length,
     medium: wallets.filter(w => w.suspicionLevel === 'medium').length,
     low: wallets.filter(w => w.suspicionLevel === 'low').length,
+    whales: wallets.filter(w => w.isWhale).length,
+    clusters: wallets.filter(w => w.cluster && w.clusterSize > 1).length,
+    'pre-res': wallets.filter(w => w.preResolutionTrades > 0).length,
   };
 
   return (
@@ -1148,6 +1157,37 @@ export default function Dashboard() {
                   {f} ({filterCounts[f]})
                 </button>
               ))}
+              <span className="w-px bg-neutral-800 mx-1"></span>
+              <button
+                onClick={() => setFilter('whales')}
+                className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
+                  filter === 'whales'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'bg-neutral-900 text-neutral-500 border border-neutral-800 hover:border-blue-500/30 hover:text-blue-400'
+                }`}
+              >
+                🐋 whales ({filterCounts.whales})
+              </button>
+              <button
+                onClick={() => setFilter('clusters')}
+                className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
+                  filter === 'clusters'
+                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40'
+                    : 'bg-neutral-900 text-neutral-500 border border-neutral-800 hover:border-purple-500/30 hover:text-purple-400'
+                }`}
+              >
+                🔗 clusters ({filterCounts.clusters})
+              </button>
+              <button
+                onClick={() => setFilter('pre-res')}
+                className={`px-3 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
+                  filter === 'pre-res'
+                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                    : 'bg-neutral-900 text-neutral-500 border border-neutral-800 hover:border-orange-500/30 hover:text-orange-400'
+                }`}
+              >
+                ⚡ pre-res ({filterCounts['pre-res']})
+              </button>
             </div>
           </div>
 
