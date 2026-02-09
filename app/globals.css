@@ -3,49 +3,101 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #141414;
-  --border: #262626;
-  --accent: #3b82f6;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --success: #22c55e;
+  --background: #000000;
+  --foreground: #e5e5e5;
+  --card: #0a0a0a;
+  --card-hover: #111111;
+  --border: #1a1a1a;
+  --border-light: #262626;
+  --accent: #ffffff;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+  --muted: #525252;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #262626 #0a0a0a;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #333333;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 4px;
   padding: 1.5rem;
 }
 
 .badge {
   padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
+  border-radius: 2px;
+  font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.badge-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-.badge-high { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-.badge-medium { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-.badge-low { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.badge-critical { background: rgba(220, 38, 38, 0.15); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); }
+.badge-high { background: rgba(217, 119, 6, 0.15); color: #d97706; border: 1px solid rgba(217, 119, 6, 0.3); }
+.badge-medium { background: rgba(161, 161, 170, 0.15); color: #a1a1aa; border: 1px solid rgba(161, 161, 170, 0.3); }
+.badge-low { background: rgba(82, 82, 91, 0.15); color: #71717a; border: 1px solid rgba(82, 82, 91, 0.3); }
 
 .stat-value {
-  font-size: 2rem;
-  font-weight: 700;
+  font-size: 1.75rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .mono {
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 0.875rem;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+}
+
+/* Trading dashboard table styles */
+table {
+  border-collapse: collapse;
+}
+
+th {
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+
+/* Remove focus outlines and replace with subtle border */
+input:focus, button:focus {
+  outline: none;
+}
+
+/* Professional button hover states */
+button {
+  transition: all 0.15s ease;
 }
