@@ -380,6 +380,57 @@ function WalletModal({ wallet, onClose }) {
               )}
             </div>
           </div>
+
+          {/* Recent Trades */}
+          {wallet.recentTrades && wallet.recentTrades.length > 0 && (
+            <div className="bg-gray-800/30 rounded-xl border border-gray-700/30 overflow-hidden">
+              <div className="p-4 border-b border-gray-700/30">
+                <h3 className="font-semibold text-white flex items-center gap-2">
+                  <span className="text-lg">📜</span>
+                  Recent Trades
+                  <span className="text-gray-500 text-sm font-normal">({wallet.recentTrades.length})</span>
+                </h3>
+              </div>
+              <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-800/50 sticky top-0">
+                    <tr className="text-gray-400 text-left">
+                      <th className="py-2 px-4 font-medium">Market</th>
+                      <th className="py-2 px-4 font-medium text-center">Side</th>
+                      <th className="py-2 px-4 font-medium text-right">Amount</th>
+                      <th className="py-2 px-4 font-medium text-right">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wallet.recentTrades.map((trade, i) => (
+                      <tr key={i} className="border-t border-gray-700/30 hover:bg-gray-700/20">
+                        <td className="py-2 px-4">
+                          <div className="max-w-[200px] truncate text-gray-300" title={trade.market}>
+                            {trade.market}
+                          </div>
+                        </td>
+                        <td className="py-2 px-4 text-center">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            trade.side === 'buy'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {trade.side?.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right text-gray-300">
+                          ${formatNumber(trade.amount || 0)}
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <span className="text-gray-400">{((trade.price || 0) * 100).toFixed(0)}¢</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

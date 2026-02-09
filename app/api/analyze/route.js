@@ -97,7 +97,16 @@ async function fetchAndAnalyzeRealData() {
       lastMinuteRatio: 0,
       suspicionScore,
       suspicionLevel: level,
-      cluster: null
+      cluster: null,
+      // Include recent trades for display
+      recentTrades: wallet.trades.slice(0, 20).map(t => ({
+        market: t.market_question || t.market_slug || 'Unknown Market',
+        side: t.side,
+        amount: t.amount,
+        price: t.price,
+        outcome: t.outcome,
+        timestamp: t.timestamp
+      }))
     });
   }
 
