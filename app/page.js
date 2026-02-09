@@ -39,7 +39,22 @@ function formatMinutes(mins) {
 }
 
 function exportToCSV(wallets, filename = 'polymarket-analysis.csv') {
-  const headers = ['Address', 'Username', 'Trades', 'Wins', 'Losses', 'Win Rate', 'P-Value', 'Total PnL', 'Total Stake', 'ROI', 'Avg Mins Before Resolution', 'Last Min Ratio', 'Last 10 Min Ratio', 'Suspicion Score', 'Level'];
+  const headers = [
+    'Address', 'Username', 'Trades', 'Wins', 'Losses', 'Win Rate', 'P-Value',
+    'Total PnL', 'Total Stake', 'ROI',
+    // Pre-resolution timing
+    'Avg Mins Before Resolution', 'Last Min Ratio', 'Last 10 Min Ratio', 'Pre-Res Trades',
+    // Resolved win rate
+    'Resolved Trades', 'Resolved Wins', 'Resolved Losses', 'Resolved Win Rate',
+    // Cross-market
+    'Unique Markets', 'Winning Markets', 'Cross-Market Win Rate', 'Cross-Market Score',
+    // Whale stats
+    'Is Whale', 'Is Mega Whale', 'Largest Trade', 'Whale Trades', 'Whale Pre-Res Trades', 'Whale Score',
+    // Clustering
+    'Cluster ID', 'Cluster Size', 'Shared Funding Source',
+    // Overall
+    'Suspicion Score', 'Level'
+  ];
   const rows = wallets.map(w => [
     w.address,
     w.username || '',
@@ -51,9 +66,33 @@ function exportToCSV(wallets, filename = 'polymarket-analysis.csv') {
     '$' + (w.totalPnL || 0).toFixed(2),
     '$' + (w.totalStake || 0).toFixed(2),
     ((w.roi || 0) * 100).toFixed(2) + '%',
+    // Pre-resolution timing
     w.avgMinutesBefore?.toFixed(1) || '',
     ((w.lastMinuteRatio || 0) * 100).toFixed(1) + '%',
     ((w.last10MinRatio || 0) * 100).toFixed(1) + '%',
+    w.preResolutionTrades || 0,
+    // Resolved win rate
+    w.resolvedTradeCount || 0,
+    w.resolvedWins || 0,
+    w.resolvedLosses || 0,
+    ((w.resolvedWinRate || 0) * 100).toFixed(1) + '%',
+    // Cross-market
+    w.uniqueMarkets || 0,
+    w.winningMarkets || 0,
+    ((w.crossMarketWinRate || 0) * 100).toFixed(1) + '%',
+    w.crossMarketScore || 0,
+    // Whale stats
+    w.isWhale ? 'Yes' : 'No',
+    w.isMegaWhale ? 'Yes' : 'No',
+    '$' + (w.largestTrade || 0).toFixed(2),
+    w.whaleTrades || 0,
+    w.whalePreResolutionTrades || 0,
+    w.whaleScore || 0,
+    // Clustering
+    w.cluster || '',
+    w.clusterSize || 1,
+    w.sharedFundingSource || '',
+    // Overall
     w.suspicionScore || 0,
     w.suspicionLevel
   ]);
@@ -135,6 +174,24 @@ function Badge({ level, size = 'sm' }) {
   return (
     <span className={`inline-flex items-center ${sizeClasses} font-medium uppercase tracking-wider ${c.bg} ${c.text} border ${c.border}`}>
       {level || 'low'}
+    </span>
+  );
+}
+
+function ClusterBadge({ clusterId, clusterSize }) {
+  if (!clusterId || clusterSize <= 1) return null;
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20" title={`Cluster ${clusterId}: ${clusterSize} wallets with shared funding`}>
+      C{clusterId}
+    </span>
+  );
+}
+
+function WhaleBadge({ isWhale, isMegaWhale }) {
+  if (!isWhale) return null;
+  return (
+    <span className={`inline-flex items-center px-1 text-[10px] ${isMegaWhale ? 'text-blue-400' : 'text-blue-500/70'}`} title={isMegaWhale ? 'Mega Whale (>$25k trades)' : 'Whale (>$5k trades)'}>
+      {isMegaWhale ? '🐋' : '🐳'}
     </span>
   );
 }
@@ -286,12 +343,23 @@ function WalletRow({ wallet, onClick, rank }) {
         <div className="flex items-center gap-3">
           <span className="text-neutral-700 text-xs font-mono w-6">{rank}</span>
           <div>
-            <span className="font-mono text-xs text-neutral-300">
-              {wallet.address ? `${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}` : '-'}
-            </span>
-            {wallet.username && (
-              <div className="text-[10px] text-neutral-600">@{wallet.username}</div>
-            )}
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-xs text-neutral-300">
+                {wallet.address ? `${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}` : '-'}
+              </span>
+              <WhaleBadge isWhale={wallet.isWhale} isMegaWhale={wallet.isMegaWhale} />
+              <ClusterBadge clusterId={wallet.cluster} clusterSize={wallet.clusterSize} />
+            </div>
+            <div className="flex items-center gap-2">
+              {wallet.username && (
+                <span className="text-[10px] text-neutral-600">@{wallet.username}</span>
+              )}
+              {wallet.crossMarketWinRate > 0.7 && wallet.uniqueMarkets >= 3 && (
+                <span className="text-[10px] text-cyan-500" title={`${wallet.uniqueMarkets} markets, ${formatPercent(wallet.crossMarketWinRate)} cross-market win rate`}>
+                  x{wallet.uniqueMarkets}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </td>
@@ -319,16 +387,19 @@ function WalletRow({ wallet, onClick, rank }) {
         </span>
       </td>
       <td className="py-3 px-4 text-right">
-        {wallet.preResolutionTrades > 0 ? (
-          <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1">
+          {wallet.preResolutionTrades > 0 && (
             <span className="text-orange-500 text-[10px]" title={`${wallet.preResolutionTrades} pre-resolution trades`}>
               ⚡{wallet.preResolutionTrades}
             </span>
-            <span className="text-neutral-600 text-sm tabular-nums">{wallet.suspicionScore || 0}/10</span>
-          </div>
-        ) : (
+          )}
+          {wallet.whalePreResolutionTrades > 0 && (
+            <span className="text-blue-400 text-[10px]" title={`${wallet.whalePreResolutionTrades} whale-size pre-resolution trades`}>
+              W{wallet.whalePreResolutionTrades}
+            </span>
+          )}
           <span className="text-neutral-600 text-sm tabular-nums">{wallet.suspicionScore || 0}/10</span>
-        )}
+        </div>
       </td>
       <td className="py-3 px-4 text-right">
         <Badge level={wallet.suspicionLevel} />
@@ -456,6 +527,132 @@ function WalletModal({ wallet, onClose }) {
             </div>
           )}
 
+          {/* Resolved Win Rate */}
+          {wallet.resolvedTradeCount > 0 && (
+            <div className="bg-neutral-900 border border-green-500/30 p-4">
+              <h3 className="text-xs font-medium text-green-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span>✓</span> Resolved Market Performance
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-neutral-600 text-xs">Resolved Win Rate</div>
+                  <div className={`text-lg font-semibold tabular-nums ${(wallet.resolvedWinRate || 0) > 0.8 ? 'text-red-500' : (wallet.resolvedWinRate || 0) > 0.6 ? 'text-yellow-500' : 'text-green-500'}`}>
+                    {formatPercent(wallet.resolvedWinRate)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Resolved Trades</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">{wallet.resolvedTradeCount || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Resolved Wins</div>
+                  <div className="text-lg font-semibold text-green-500 tabular-nums">{wallet.resolvedWins || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Resolved Losses</div>
+                  <div className="text-lg font-semibold text-red-500 tabular-nums">{wallet.resolvedLosses || 0}</div>
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-neutral-600">
+                Based on actual market outcomes, not price-based estimates
+              </div>
+            </div>
+          )}
+
+          {/* Cross-Market Patterns */}
+          {wallet.uniqueMarkets >= 2 && (
+            <div className="bg-neutral-900 border border-cyan-500/30 p-4">
+              <h3 className="text-xs font-medium text-cyan-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span>⛓</span> Cross-Market Analysis
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-neutral-600 text-xs">Markets Traded</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">{wallet.uniqueMarkets || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Winning Markets</div>
+                  <div className="text-lg font-semibold text-cyan-500 tabular-nums">{wallet.winningMarkets || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Cross-Market Win Rate</div>
+                  <div className={`text-lg font-semibold tabular-nums ${(wallet.crossMarketWinRate || 0) > 0.8 ? 'text-red-500' : (wallet.crossMarketWinRate || 0) > 0.6 ? 'text-yellow-500' : 'text-neutral-400'}`}>
+                    {formatPercent(wallet.crossMarketWinRate)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Pattern Score</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">+{wallet.crossMarketScore || 0}</div>
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-neutral-600">
+                Winning across multiple unrelated markets indicates potential insider access
+              </div>
+            </div>
+          )}
+
+          {/* Whale Activity */}
+          {wallet.isWhale && (
+            <div className="bg-neutral-900 border border-blue-500/30 p-4">
+              <h3 className="text-xs font-medium text-blue-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span>{wallet.isMegaWhale ? '🐋' : '🐳'}</span> Whale Analysis
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-neutral-600 text-xs">Largest Trade</div>
+                  <div className="text-lg font-semibold text-blue-500 tabular-nums">${formatNumber(wallet.largestTrade || 0)}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Whale Trades</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">{wallet.whaleTrades || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Pre-Res Whale Trades</div>
+                  <div className={`text-lg font-semibold tabular-nums ${(wallet.whalePreResolutionTrades || 0) > 0 ? 'text-red-500' : 'text-neutral-400'}`}>
+                    {wallet.whalePreResolutionTrades || 0}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Whale Score</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">+{wallet.whaleScore || 0}</div>
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-neutral-600">
+                {wallet.isMegaWhale ? 'Mega whale: trades over $25,000' : 'Whale: trades over $5,000'} - large bets with insider info are especially concerning
+              </div>
+            </div>
+          )}
+
+          {/* Wallet Cluster */}
+          {wallet.cluster && wallet.clusterSize > 1 && (
+            <div className="bg-neutral-900 border border-purple-500/30 p-4">
+              <h3 className="text-xs font-medium text-purple-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span>🔗</span> Wallet Cluster
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="text-neutral-600 text-xs">Cluster ID</div>
+                  <div className="text-lg font-semibold text-purple-500 tabular-nums">C{wallet.cluster}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Cluster Size</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">{wallet.clusterSize} wallets</div>
+                </div>
+                {wallet.sharedFundingSource && (
+                  <div>
+                    <div className="text-neutral-600 text-xs">Shared Funding</div>
+                    <div className="text-sm font-mono text-purple-400 truncate" title={wallet.sharedFundingSource}>
+                      {wallet.sharedFundingSource.slice(0, 8)}...{wallet.sharedFundingSource.slice(-6)}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 text-[10px] text-neutral-600">
+                Multiple wallets funded by the same source may be controlled by a single entity
+              </div>
+            </div>
+          )}
+
           {/* Trading Stats */}
           <div className="bg-neutral-900 border border-neutral-800 p-4">
             <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-4">
@@ -499,6 +696,36 @@ function WalletModal({ wallet, onClose }) {
                   Win rate exceeds 80% - statistically improbable
                 </div>
               )}
+              {wallet.resolvedWinRate > 0.8 && wallet.resolvedTradeCount >= 5 && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <span className="w-1 h-1 bg-red-500"></span>
+                  Verified {formatPercent(wallet.resolvedWinRate)} win rate on {wallet.resolvedTradeCount} resolved markets
+                </div>
+              )}
+              {wallet.crossMarketWinRate > 0.7 && wallet.uniqueMarkets >= 5 && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <span className="w-1 h-1 bg-red-500"></span>
+                  Winning across {wallet.uniqueMarkets} different markets - cross-market insider access suspected
+                </div>
+              )}
+              {wallet.isMegaWhale && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <span className="w-1 h-1 bg-red-500"></span>
+                  Mega whale: trades exceeding $25,000 detected
+                </div>
+              )}
+              {wallet.whalePreResolutionTrades > 0 && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <span className="w-1 h-1 bg-red-500"></span>
+                  {wallet.whalePreResolutionTrades} large trades placed before market resolution
+                </div>
+              )}
+              {wallet.cluster && wallet.clusterSize > 2 && (
+                <div className="flex items-center gap-2 text-purple-500">
+                  <span className="w-1 h-1 bg-purple-500"></span>
+                  Part of {wallet.clusterSize}-wallet cluster with shared funding source
+                </div>
+              )}
               {wallet.totalStake > 10000 && (
                 <div className="flex items-center gap-2 text-yellow-500">
                   <span className="w-1 h-1 bg-yellow-500"></span>
@@ -517,7 +744,7 @@ function WalletModal({ wallet, onClose }) {
                   {((wallet.last10MinRatio || 0) * 100).toFixed(0)}% of trades placed within 10 minutes of resolution
                 </div>
               )}
-              {wallet.pValue >= 0.05 && winRate <= 60 && (
+              {wallet.pValue >= 0.05 && winRate <= 60 && !wallet.isWhale && !wallet.cluster && (
                 <div className="flex items-center gap-2 text-green-500">
                   <span className="w-1 h-1 bg-green-500"></span>
                   Trading pattern within normal parameters
@@ -754,7 +981,7 @@ export default function Dashboard() {
         </header>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
           <StatCard
             label="Wallets Analyzed"
             value={summary.totalWallets?.toLocaleString() || '0'}
@@ -767,12 +994,6 @@ export default function Dashboard() {
             subtext={`${summary.criticalWallets || 0} critical`}
           />
           <StatCard
-            label="Pre-Res Traders"
-            value={summary.walletsWithPreResolutionTrades || 0}
-            color="text-orange-500"
-            subtext={`${summary.highPreResolutionWallets || 0} high-risk`}
-          />
-          <StatCard
             label="Total Volume"
             value={`$${formatNumber(summary.totalVolume || 0)}`}
             subtext={`${summary.totalMarkets || 0} markets`}
@@ -782,6 +1003,33 @@ export default function Dashboard() {
             value={`${(summary.suspiciousVolumePercent || 0).toFixed(1)}%`}
             color="text-red-500"
             subtext={`$${formatNumber(summary.suspiciousVolume || 0)}`}
+          />
+        </div>
+
+        {/* Secondary Stats Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
+          <StatCard
+            label="Pre-Res Traders"
+            value={summary.walletsWithPreResolutionTrades || 0}
+            color="text-orange-500"
+            subtext={`${summary.highPreResolutionWallets || 0} high-risk`}
+          />
+          <StatCard
+            label="Whales Detected"
+            value={summary.whaleCount || 0}
+            color="text-blue-500"
+            subtext="Large position traders"
+          />
+          <StatCard
+            label="Wallet Clusters"
+            value={summary.clusterCount || 0}
+            color="text-purple-500"
+            subtext="Linked wallet groups"
+          />
+          <StatCard
+            label="Resolved Markets"
+            value={summary.resolvedMarketsAnalyzed || 0}
+            subtext="For outcome verification"
           />
         </div>
 
@@ -875,22 +1123,40 @@ export default function Dashboard() {
         {/* Info Box */}
         <div className="mt-6 bg-neutral-900 border border-neutral-800 p-4">
           <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-4">Detection Methodology</h3>
-          <div className="grid md:grid-cols-4 gap-6 text-xs">
+          <div className="grid md:grid-cols-4 gap-6 text-xs mb-6">
             <div>
               <div className="text-neutral-400 font-medium mb-1">P-Value Analysis</div>
               <p className="text-neutral-600">Probability of achieving the observed win rate by chance. Values below 0.001 indicate statistically impossible luck.</p>
             </div>
             <div>
-              <div className="text-neutral-400 font-medium mb-1">Win Rate Tracking</div>
-              <p className="text-neutral-600">Monitors trading success rates. Sustained rates above 70% across multiple trades are flagged for review.</p>
+              <div className="text-green-500 font-medium mb-1">✓ Resolved Win Rate</div>
+              <p className="text-neutral-600">Accurate win rates based on actual market resolutions, not price estimates. Verified against on-chain outcomes.</p>
             </div>
             <div>
               <div className="text-orange-500 font-medium mb-1">⚡ Pre-Resolution Timing</div>
               <p className="text-neutral-600">Analyzes trade timing relative to market resolution. Trades placed minutes before resolution are highly suspicious.</p>
             </div>
             <div>
+              <div className="text-cyan-500 font-medium mb-1">⛓ Cross-Market Patterns</div>
+              <p className="text-neutral-600">Detects wallets winning across multiple unrelated markets - a strong indicator of insider information access.</p>
+            </div>
+          </div>
+          <div className="grid md:grid-cols-4 gap-6 text-xs">
+            <div>
+              <div className="text-blue-500 font-medium mb-1">🐋 Whale Detection</div>
+              <p className="text-neutral-600">Flags large trades ($5k+ whale, $25k+ mega-whale), especially before resolution. Big bets with advance knowledge are high-risk.</p>
+            </div>
+            <div>
+              <div className="text-purple-500 font-medium mb-1">🔗 Wallet Clustering</div>
+              <p className="text-neutral-600">Traces USDC funding sources on Polygon to identify wallets controlled by the same entity. Sybil attack detection.</p>
+            </div>
+            <div>
               <div className="text-neutral-400 font-medium mb-1">Risk Scoring</div>
-              <p className="text-neutral-600">Composite score combining p-value, win rate, volume patterns, and timing analysis for comprehensive risk assessment.</p>
+              <p className="text-neutral-600">Composite score combining all signals: p-value, timing, whale activity, cross-market wins, and cluster membership.</p>
+            </div>
+            <div>
+              <div className="text-neutral-400 font-medium mb-1">Data Sources</div>
+              <p className="text-neutral-600">Live data from Polymarket API, Gamma API for resolutions, and Polygon RPC for on-chain funding traces.</p>
             </div>
           </div>
         </div>

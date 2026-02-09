@@ -5,8 +5,14 @@ import {
   fetchAllTrades,
   aggregateByWallet,
   fetchRecentlyResolvedMarkets,
-  calculatePreResolutionScore
+  calculatePreResolutionScore,
+  calculateResolvedWinRate,
+  analyzeCrossMarketPatterns,
+  analyzeWhaleActivity,
+  buildWalletClusters,
+  attachClusterInfo
 } from '@/lib/polymarketApi';
+import { batchGetFundingSources } from '@/lib/polygonRpc';
 
 let cachedAnalysis = null;
 let lastFetch = 0;
@@ -100,6 +106,17 @@ async function fetchAndAnalyzeRealData() {
       avgMinutesBefore = totalMinutes / preResolution.timing.tradesByTiming.length;
     }
 
+    // Resolved win rate (based on actual market outcomes)
+    const resolvedStats = calculateResolvedWinRate(wallet.trades, resolvedMarkets);
+
+    // Cross-market pattern analysis
+    const crossMarket = analyzeCrossMarketPatterns(wallet.trades);
+    suspicionScore += crossMarket.crossMarketScore;
+
+    // Whale activity analysis
+    const whaleStats = analyzeWhaleActivity(wallet.trades, resolvedMarkets);
+    suspicionScore += whaleStats.whaleScore;
+
     let level = 'low';
     if (suspicionScore >= 8) level = 'critical';
     else if (suspicionScore >= 5) level = 'high';
@@ -121,9 +138,28 @@ async function fetchAndAnalyzeRealData() {
       last10MinRatio: preResolution.last10MinRatio || 0,
       lastHourRatio: preResolution.lastHourRatio || 0,
       preResolutionTrades: preResolution.timing.tradesWithTiming,
+      // Resolved win rate
+      resolvedWins: resolvedStats.resolvedWins,
+      resolvedLosses: resolvedStats.resolvedLosses,
+      resolvedTradeCount: resolvedStats.resolvedTradeCount,
+      resolvedWinRate: resolvedStats.resolvedWinRate,
+      // Cross-market patterns
+      uniqueMarkets: crossMarket.uniqueMarkets,
+      winningMarkets: crossMarket.winningMarkets,
+      crossMarketWinRate: crossMarket.crossMarketWinRate,
+      crossMarketScore: crossMarket.crossMarketScore,
+      // Whale stats
+      largestTrade: whaleStats.largestTrade,
+      whaleTrades: whaleStats.whaleTrades,
+      isWhale: whaleStats.isWhale,
+      isMegaWhale: whaleStats.isMegaWhale,
+      whalePreResolutionTrades: whaleStats.whalePreResolutionTrades,
+      whaleScore: whaleStats.whaleScore,
       suspicionScore,
       suspicionLevel: level,
       cluster: null,
+      clusterSize: 1,
+      sharedFundingSource: null,
       // Include recent trades for display
       recentTrades: wallet.trades.slice(0, 20).map(t => ({
         market: t.market_question || t.market_slug || 'Unknown Market',
@@ -138,16 +174,42 @@ async function fetchAndAnalyzeRealData() {
 
   analyzedWallets.sort((a, b) => a.pValue - b.pValue);
 
-  const flaggedCount = analyzedWallets.filter(w => w.suspicionLevel !== 'low').length;
-  const criticalCount = analyzedWallets.filter(w => w.suspicionLevel === 'critical').length;
-  const totalVolume = analyzedWallets.reduce((sum, w) => sum + w.totalStake, 0);
-  const suspiciousVolume = analyzedWallets
+  // Wallet clustering - fetch funding sources for top suspicious wallets
+  let clusterResult = { clusters: [], walletToCluster: new Map() };
+  try {
+    const walletsToCluster = analyzedWallets
+      .filter(w => w.suspicionLevel !== 'low')
+      .slice(0, 30)
+      .map(w => w.address);
+
+    if (walletsToCluster.length > 0) {
+      console.log(`Clustering ${walletsToCluster.length} suspicious wallets...`);
+      const fundingSourceMap = await batchGetFundingSources(walletsToCluster, {
+        blockRange: 100000,
+        maxConcurrent: 2,
+        delayMs: 300
+      });
+      clusterResult = buildWalletClusters(fundingSourceMap);
+      console.log(`Found ${clusterResult.clusters.length} clusters`);
+    }
+  } catch (e) {
+    console.error('Clustering error (continuing without clusters):', e.message);
+  }
+
+  // Attach cluster info to wallets
+  const clusteredWallets = attachClusterInfo(analyzedWallets, clusterResult);
+
+  const flaggedCount = clusteredWallets.filter(w => w.suspicionLevel !== 'low').length;
+  const criticalCount = clusteredWallets.filter(w => w.suspicionLevel === 'critical').length;
+  const totalVolume = clusteredWallets.reduce((sum, w) => sum + w.totalStake, 0);
+  const suspiciousVolume = clusteredWallets
     .filter(w => w.suspicionLevel !== 'low')
     .reduce((sum, w) => sum + w.totalStake, 0);
 
   // Count wallets with pre-resolution trading
-  const walletsWithPreRes = analyzedWallets.filter(w => w.preResolutionTrades > 0).length;
-  const highPreResWallets = analyzedWallets.filter(w => w.lastMinuteRatio > 0.1).length;
+  const walletsWithPreRes = clusteredWallets.filter(w => w.preResolutionTrades > 0).length;
+  const highPreResWallets = clusteredWallets.filter(w => w.lastMinuteRatio > 0.1).length;
+  const whaleCount = clusteredWallets.filter(w => w.isWhale).length;
 
   return {
     summary: {
@@ -159,14 +221,16 @@ async function fetchAndAnalyzeRealData() {
       criticalWallets: criticalCount,
       walletsWithPreResolutionTrades: walletsWithPreRes,
       highPreResolutionWallets: highPreResWallets,
+      clusterCount: clusterResult.clusters.length,
+      whaleCount,
       totalVolume,
       suspiciousVolume,
       suspiciousVolumePercent: totalVolume > 0 ? (suspiciousVolume / totalVolume) * 100 : 0,
       dataSource: 'live'
     },
-    wallets: analyzedWallets,
-    clusters: [],
-    topSuspicious: analyzedWallets.slice(0, 20)
+    wallets: clusteredWallets,
+    clusters: clusterResult.clusters,
+    topSuspicious: clusteredWallets.slice(0, 20)
   };
 }
 
