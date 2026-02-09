@@ -105,7 +105,7 @@ async function fetchAndAnalyzeRealData() {
         amount: t.amount,
         price: t.price,
         outcome: t.outcome,
-        timestamp: t.timestamp
+        timestamp: t.timestamp ? new Date(t.timestamp).toISOString() : null
       }))
     });
   }

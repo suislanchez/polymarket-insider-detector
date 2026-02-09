@@ -31,6 +31,31 @@ function timeAgo(date) {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+function exportToCSV(wallets, filename = 'polymarket-analysis.csv') {
+  const headers = ['Address', 'Username', 'Trades', 'Wins', 'Losses', 'Win Rate', 'P-Value', 'Total PnL', 'Total Stake', 'ROI', 'Suspicion Score', 'Level'];
+  const rows = wallets.map(w => [
+    w.address,
+    w.username || '',
+    w.trades,
+    w.wins,
+    w.losses,
+    (w.winRate * 100).toFixed(2) + '%',
+    w.pValue?.toExponential(4) || '',
+    '$' + (w.totalPnL || 0).toFixed(2),
+    '$' + (w.totalStake || 0).toFixed(2),
+    ((w.roi || 0) * 100).toFixed(2) + '%',
+    w.suspicionScore || 0,
+    w.suspicionLevel
+  ]);
+
+  const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+
 // ============ UI COMPONENTS ============
 
 function LoadingSpinner() {
@@ -50,6 +75,35 @@ function LoadingSpinner() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SearchBar({ value, onChange, onClear }) {
+  return (
+    <div className="relative">
+      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search by wallet address..."
+        className="w-full pl-10 pr-10 py-2.5 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 transition-all font-mono text-sm"
+      />
+      {value && (
+        <button
+          onClick={onClear}
+          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-white transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -108,6 +162,47 @@ function ProgressBar({ value, max = 100, color = 'blue' }) {
         className={`h-full bg-gradient-to-r ${colors[color]} rounded-full transition-all duration-500`}
         style={{ width: `${percent}%` }}
       />
+    </div>
+  );
+}
+
+function TimingChart({ trades }) {
+  if (!trades || trades.length === 0) return null;
+
+  // Group trades by hour of day
+  const hourCounts = Array(24).fill(0);
+  trades.forEach(t => {
+    if (t.timestamp) {
+      const hour = new Date(t.timestamp).getHours();
+      hourCounts[hour]++;
+    }
+  });
+
+  const maxCount = Math.max(...hourCounts, 1);
+
+  return (
+    <div className="bg-gray-800/30 rounded-xl p-4 border border-gray-700/30">
+      <h4 className="text-sm font-medium text-gray-400 mb-3 flex items-center gap-2">
+        <span>🕐</span> Trading Activity by Hour (UTC)
+      </h4>
+      <div className="flex items-end gap-1 h-16">
+        {hourCounts.map((count, hour) => (
+          <div key={hour} className="flex-1 flex flex-col items-center gap-1">
+            <div
+              className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t transition-all hover:from-blue-500 hover:to-blue-300"
+              style={{ height: `${(count / maxCount) * 100}%`, minHeight: count > 0 ? '4px' : '0' }}
+              title={`${hour}:00 - ${count} trades`}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between mt-1 text-[10px] text-gray-600">
+        <span>0h</span>
+        <span>6h</span>
+        <span>12h</span>
+        <span>18h</span>
+        <span>24h</span>
+      </div>
     </div>
   );
 }
@@ -251,7 +346,7 @@ function WalletModal({ wallet, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-700/50 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-auto shadow-2xl"
+        className="bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-700/50 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -320,6 +415,11 @@ function WalletModal({ wallet, onClose }) {
               <ProgressBar value={(wallet.suspicionScore || 0) * 10} color="red" />
             </div>
           </div>
+
+          {/* Timing Chart */}
+          {wallet.recentTrades && wallet.recentTrades.length > 0 && (
+            <TimingChart trades={wallet.recentTrades} />
+          )}
 
           {/* Trading Stats */}
           <div className="bg-gray-800/30 rounded-xl p-5 border border-gray-700/30">
@@ -399,6 +499,7 @@ function WalletModal({ wallet, onClose }) {
                       <th className="py-2 px-4 font-medium text-center">Side</th>
                       <th className="py-2 px-4 font-medium text-right">Amount</th>
                       <th className="py-2 px-4 font-medium text-right">Price</th>
+                      <th className="py-2 px-4 font-medium text-right">Time</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -424,6 +525,9 @@ function WalletModal({ wallet, onClose }) {
                         <td className="py-2 px-4 text-right">
                           <span className="text-gray-400">{((trade.price || 0) * 100).toFixed(0)}¢</span>
                         </td>
+                        <td className="py-2 px-4 text-right text-gray-500 text-xs">
+                          {trade.timestamp ? new Date(trade.timestamp).toLocaleDateString() : '-'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -448,6 +552,7 @@ export default function Dashboard() {
   const [sortBy, setSortBy] = useState('pValue');
   const [sortOrder, setSortOrder] = useState('asc');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/api/analyze')
@@ -491,12 +596,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleExport = () => {
+    if (filteredAndSortedWallets.length > 0) {
+      exportToCSV(filteredAndSortedWallets, `polymarket-analysis-${new Date().toISOString().split('T')[0]}.csv`);
+    }
+  };
+
   const wallets = data?.wallets || [];
 
   const filteredAndSortedWallets = useMemo(() => {
     let result = wallets.filter(w => {
-      if (filter === 'all') return true;
-      return w.suspicionLevel === filter;
+      // Apply suspicion level filter
+      if (filter !== 'all' && w.suspicionLevel !== filter) return false;
+      // Apply search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return w.address?.toLowerCase().includes(query) ||
+               w.username?.toLowerCase().includes(query);
+      }
+      return true;
     });
 
     result.sort((a, b) => {
@@ -507,7 +625,7 @@ export default function Dashboard() {
     });
 
     return result;
-  }, [wallets, filter, sortBy, sortOrder]);
+  }, [wallets, filter, sortBy, sortOrder, searchQuery]);
 
   const suspiciousWallets = useMemo(() =>
     wallets.filter(w => w.suspicionLevel === 'critical' || w.suspicionLevel === 'high')
@@ -578,16 +696,27 @@ export default function Dashboard() {
                 </p>
               )}
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={loading}
-              className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 rounded-xl font-medium transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 flex items-center gap-2 disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh Data
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleExport}
+                className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-xl font-medium transition-all duration-200 flex items-center gap-2 border border-gray-700"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
+              <button
+                onClick={handleRefresh}
+                disabled={loading}
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 rounded-xl font-medium transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Data
+              </button>
+            </div>
           </div>
         </header>
 
@@ -631,10 +760,19 @@ export default function Dashboard() {
 
         {/* Wallet Table */}
         <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur rounded-2xl border border-gray-700/50 overflow-hidden">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-5 border-b border-gray-700/50 gap-4">
-            <div>
-              <h2 className="text-xl font-bold">Wallet Analysis</h2>
-              <p className="text-gray-500 text-sm">{filteredAndSortedWallets.length} wallets</p>
+          <div className="p-5 border-b border-gray-700/50 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Wallet Analysis</h2>
+                <p className="text-gray-500 text-sm">{filteredAndSortedWallets.length} wallets</p>
+              </div>
+              <div className="w-full sm:w-72">
+                <SearchBar
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  onClear={() => setSearchQuery('')}
+                />
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {['all', 'critical', 'high', 'medium', 'low'].map(f => (
@@ -685,7 +823,7 @@ export default function Dashboard() {
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-500">
                       <div className="text-4xl mb-2">🔍</div>
-                      No wallets found matching this filter
+                      {searchQuery ? `No wallets found matching "${searchQuery}"` : 'No wallets found matching this filter'}
                     </td>
                   </tr>
                 )}
