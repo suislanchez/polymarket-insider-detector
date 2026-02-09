@@ -347,6 +347,30 @@ function WalletRow({ wallet, onClick, rank }) {
               <span className="font-mono text-xs text-neutral-300">
                 {wallet.address ? `${wallet.address.slice(0, 10)}...${wallet.address.slice(-6)}` : '-'}
               </span>
+              <a
+                href={`https://polymarket.com/profile/${wallet.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-neutral-700 hover:text-green-500 transition-colors"
+                title="Polymarket"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </a>
+              <a
+                href={`https://polygonscan.com/address/${wallet.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-neutral-700 hover:text-purple-500 transition-colors"
+                title="Polygonscan"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
               <WhaleBadge isWhale={wallet.isWhale} isMegaWhale={wallet.isMegaWhale} />
               <ClusterBadge clusterId={wallet.cluster} clusterSize={wallet.clusterSize} />
             </div>
@@ -438,9 +462,38 @@ function WalletModal({ wallet, onClose }) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
                 </button>
+                <a
+                  href={`https://polymarket.com/profile/${wallet.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-neutral-600 hover:text-green-500 transition-colors"
+                  title="View on Polymarket"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </a>
+                <a
+                  href={`https://polygonscan.com/address/${wallet.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-neutral-600 hover:text-purple-500 transition-colors"
+                  title="View on Polygonscan"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
               </div>
               {wallet.username && (
-                <div className="text-xs text-neutral-500 mt-1">@{wallet.username}</div>
+                <a
+                  href={`https://polymarket.com/profile/${wallet.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-neutral-500 hover:text-green-500 transition-colors mt-1"
+                >
+                  @{wallet.username}
+                </a>
               )}
             </div>
             <button onClick={onClose} className="text-neutral-600 hover:text-neutral-400 p-1 transition-colors">
@@ -641,9 +694,18 @@ function WalletModal({ wallet, onClose }) {
                 {wallet.sharedFundingSource && (
                   <div>
                     <div className="text-neutral-600 text-xs">Shared Funding</div>
-                    <div className="text-sm font-mono text-purple-400 truncate" title={wallet.sharedFundingSource}>
-                      {wallet.sharedFundingSource.slice(0, 8)}...{wallet.sharedFundingSource.slice(-6)}
-                    </div>
+                    <a
+                      href={`https://polygonscan.com/address/${wallet.sharedFundingSource}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-mono text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1"
+                      title={wallet.sharedFundingSource}
+                    >
+                      <span>{wallet.sharedFundingSource.slice(0, 8)}...{wallet.sharedFundingSource.slice(-6)}</span>
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
                   </div>
                 )}
               </div>
@@ -777,9 +839,24 @@ function WalletModal({ wallet, onClose }) {
                     {wallet.recentTrades.map((trade, i) => (
                       <tr key={i} className="border-t border-neutral-800 hover:bg-neutral-800/30">
                         <td className="py-2 px-3">
-                          <div className="max-w-[180px] truncate text-neutral-400" title={trade.market}>
-                            {trade.market}
-                          </div>
+                          {trade.marketSlug ? (
+                            <a
+                              href={`https://polymarket.com/event/${trade.marketSlug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="max-w-[180px] truncate text-neutral-400 hover:text-green-500 transition-colors flex items-center gap-1"
+                              title={trade.market}
+                            >
+                              <span className="truncate">{trade.market}</span>
+                              <svg className="w-3 h-3 flex-shrink-0 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          ) : (
+                            <div className="max-w-[180px] truncate text-neutral-400" title={trade.market}>
+                              {trade.market}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-center">
                           <span className={`px-1.5 py-0.5 text-[10px] font-medium uppercase ${

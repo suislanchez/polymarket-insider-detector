@@ -163,6 +163,8 @@ async function fetchAndAnalyzeRealData() {
       // Include recent trades for display
       recentTrades: wallet.trades.slice(0, 20).map(t => ({
         market: t.market_question || t.market_slug || 'Unknown Market',
+        marketSlug: t.market_slug || null,
+        conditionId: t.conditionId || null,
         side: t.side,
         amount: t.amount,
         price: t.price,
