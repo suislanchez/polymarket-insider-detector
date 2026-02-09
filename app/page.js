@@ -31,8 +31,15 @@ function timeAgo(date) {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+function formatMinutes(mins) {
+  if (mins == null || isNaN(mins)) return '-';
+  if (mins < 1) return '< 1 min';
+  if (mins < 60) return `${Math.round(mins)} min`;
+  return `${(mins / 60).toFixed(1)} hrs`;
+}
+
 function exportToCSV(wallets, filename = 'polymarket-analysis.csv') {
-  const headers = ['Address', 'Username', 'Trades', 'Wins', 'Losses', 'Win Rate', 'P-Value', 'Total PnL', 'Total Stake', 'ROI', 'Suspicion Score', 'Level'];
+  const headers = ['Address', 'Username', 'Trades', 'Wins', 'Losses', 'Win Rate', 'P-Value', 'Total PnL', 'Total Stake', 'ROI', 'Avg Mins Before Resolution', 'Last Min Ratio', 'Last 10 Min Ratio', 'Suspicion Score', 'Level'];
   const rows = wallets.map(w => [
     w.address,
     w.username || '',
@@ -44,6 +51,9 @@ function exportToCSV(wallets, filename = 'polymarket-analysis.csv') {
     '$' + (w.totalPnL || 0).toFixed(2),
     '$' + (w.totalStake || 0).toFixed(2),
     ((w.roi || 0) * 100).toFixed(2) + '%',
+    w.avgMinutesBefore?.toFixed(1) || '',
+    ((w.lastMinuteRatio || 0) * 100).toFixed(1) + '%',
+    ((w.last10MinRatio || 0) * 100).toFixed(1) + '%',
     w.suspicionScore || 0,
     w.suspicionLevel
   ]);
@@ -309,7 +319,16 @@ function WalletRow({ wallet, onClick, rank }) {
         </span>
       </td>
       <td className="py-3 px-4 text-right">
-        <span className="text-neutral-600 text-sm tabular-nums">{wallet.suspicionScore || 0}/10</span>
+        {wallet.preResolutionTrades > 0 ? (
+          <div className="flex items-center justify-end gap-1">
+            <span className="text-orange-500 text-[10px]" title={`${wallet.preResolutionTrades} pre-resolution trades`}>
+              ⚡{wallet.preResolutionTrades}
+            </span>
+            <span className="text-neutral-600 text-sm tabular-nums">{wallet.suspicionScore || 0}/10</span>
+          </div>
+        ) : (
+          <span className="text-neutral-600 text-sm tabular-nums">{wallet.suspicionScore || 0}/10</span>
+        )}
       </td>
       <td className="py-3 px-4 text-right">
         <Badge level={wallet.suspicionLevel} />
@@ -401,6 +420,42 @@ function WalletModal({ wallet, onClose }) {
             <TimingChart trades={wallet.recentTrades} />
           )}
 
+          {/* Pre-Resolution Timing */}
+          {(wallet.preResolutionTrades > 0 || wallet.avgMinutesBefore) && (
+            <div className="bg-neutral-900 border border-orange-500/30 p-4">
+              <h3 className="text-xs font-medium text-orange-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <span>⚡</span> Pre-Resolution Timing
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <div className="text-neutral-600 text-xs">Avg Time Before</div>
+                  <div className="text-lg font-semibold text-orange-500 tabular-nums">
+                    {formatMinutes(wallet.avgMinutesBefore)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Pre-Res Trades</div>
+                  <div className="text-lg font-semibold text-neutral-200 tabular-nums">{wallet.preResolutionTrades || 0}</div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Last Min Ratio</div>
+                  <div className={`text-lg font-semibold tabular-nums ${(wallet.lastMinuteRatio || 0) > 0.1 ? 'text-red-500' : 'text-neutral-400'}`}>
+                    {((wallet.lastMinuteRatio || 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-neutral-600 text-xs">Last 10 Min Ratio</div>
+                  <div className={`text-lg font-semibold tabular-nums ${(wallet.last10MinRatio || 0) > 0.3 ? 'text-orange-500' : 'text-neutral-400'}`}>
+                    {((wallet.last10MinRatio || 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 text-[10px] text-neutral-600">
+                Trades placed shortly before market resolution may indicate advance knowledge of outcomes
+              </div>
+            </div>
+          )}
+
           {/* Trading Stats */}
           <div className="bg-neutral-900 border border-neutral-800 p-4">
             <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-4">
@@ -448,6 +503,18 @@ function WalletModal({ wallet, onClose }) {
                 <div className="flex items-center gap-2 text-yellow-500">
                   <span className="w-1 h-1 bg-yellow-500"></span>
                   High volume trader - increased scrutiny recommended
+                </div>
+              )}
+              {wallet.lastMinuteRatio > 0.1 && (
+                <div className="flex items-center gap-2 text-red-500">
+                  <span className="w-1 h-1 bg-red-500"></span>
+                  {((wallet.lastMinuteRatio || 0) * 100).toFixed(0)}% of trades placed within 1 minute of resolution
+                </div>
+              )}
+              {wallet.last10MinRatio > 0.3 && (
+                <div className="flex items-center gap-2 text-orange-500">
+                  <span className="w-1 h-1 bg-orange-500"></span>
+                  {((wallet.last10MinRatio || 0) * 100).toFixed(0)}% of trades placed within 10 minutes of resolution
                 </div>
               )}
               {wallet.pValue >= 0.05 && winRate <= 60 && (
@@ -687,7 +754,7 @@ export default function Dashboard() {
         </header>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-6">
           <StatCard
             label="Wallets Analyzed"
             value={summary.totalWallets?.toLocaleString() || '0'}
@@ -698,6 +765,12 @@ export default function Dashboard() {
             value={summary.flaggedWallets || 0}
             color="text-yellow-500"
             subtext={`${summary.criticalWallets || 0} critical`}
+          />
+          <StatCard
+            label="Pre-Res Traders"
+            value={summary.walletsWithPreResolutionTrades || 0}
+            color="text-orange-500"
+            subtext={`${summary.highPreResolutionWallets || 0} high-risk`}
           />
           <StatCard
             label="Total Volume"
@@ -802,7 +875,7 @@ export default function Dashboard() {
         {/* Info Box */}
         <div className="mt-6 bg-neutral-900 border border-neutral-800 p-4">
           <h3 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-4">Detection Methodology</h3>
-          <div className="grid md:grid-cols-3 gap-6 text-xs">
+          <div className="grid md:grid-cols-4 gap-6 text-xs">
             <div>
               <div className="text-neutral-400 font-medium mb-1">P-Value Analysis</div>
               <p className="text-neutral-600">Probability of achieving the observed win rate by chance. Values below 0.001 indicate statistically impossible luck.</p>
@@ -810,6 +883,10 @@ export default function Dashboard() {
             <div>
               <div className="text-neutral-400 font-medium mb-1">Win Rate Tracking</div>
               <p className="text-neutral-600">Monitors trading success rates. Sustained rates above 70% across multiple trades are flagged for review.</p>
+            </div>
+            <div>
+              <div className="text-orange-500 font-medium mb-1">⚡ Pre-Resolution Timing</div>
+              <p className="text-neutral-600">Analyzes trade timing relative to market resolution. Trades placed minutes before resolution are highly suspicious.</p>
             </div>
             <div>
               <div className="text-neutral-400 font-medium mb-1">Risk Scoring</div>

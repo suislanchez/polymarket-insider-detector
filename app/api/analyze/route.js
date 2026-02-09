@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { generateDemoData } from '@/lib/demoData';
 import { runFullAnalysis, binomialPValue } from '@/lib/detection';
-import { fetchAllTrades, aggregateByWallet } from '@/lib/polymarketApi';
+import {
+  fetchAllTrades,
+  aggregateByWallet,
+  fetchRecentlyResolvedMarkets,
+  calculatePreResolutionScore
+} from '@/lib/polymarketApi';
 
 let cachedAnalysis = null;
 let lastFetch = 0;
@@ -10,9 +15,14 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 async function fetchAndAnalyzeRealData() {
   console.log('Fetching real data from Polymarket...');
 
-  // Fetch recent trades (public endpoint)
-  const trades = await fetchAllTrades(3000);
+  // Fetch recent trades and resolved markets in parallel
+  const [trades, resolvedMarkets] = await Promise.all([
+    fetchAllTrades(3000),
+    fetchRecentlyResolvedMarkets(100)
+  ]);
+
   console.log(`Fetched ${trades.length} trades`);
+  console.log(`Fetched ${resolvedMarkets.length} resolved markets`);
 
   if (trades.length === 0) {
     throw new Error('No trades found');
@@ -77,6 +87,19 @@ async function fetchAndAnalyzeRealData() {
     if (totalStake > 100000) suspicionScore += 2;
     else if (totalStake > 10000) suspicionScore += 1;
 
+    // Pre-resolution timing analysis
+    const preResolution = calculatePreResolutionScore(wallet.trades, resolvedMarkets);
+    suspicionScore += preResolution.score;
+
+    // Calculate average minutes before resolution for trades that match
+    let avgMinutesBefore = null;
+    if (preResolution.timing.tradesByTiming.length > 0) {
+      const totalMinutes = preResolution.timing.tradesByTiming.reduce(
+        (sum, t) => sum + t.minutesBefore, 0
+      );
+      avgMinutesBefore = totalMinutes / preResolution.timing.tradesByTiming.length;
+    }
+
     let level = 'low';
     if (suspicionScore >= 8) level = 'critical';
     else if (suspicionScore >= 5) level = 'high';
@@ -93,8 +116,11 @@ async function fetchAndAnalyzeRealData() {
       totalPnL,
       totalStake,
       roi: totalStake > 0 ? totalPnL / totalStake : 0,
-      avgMinutesBefore: null, // Would need resolution times
-      lastMinuteRatio: 0,
+      avgMinutesBefore,
+      lastMinuteRatio: preResolution.lastMinuteRatio || 0,
+      last10MinRatio: preResolution.last10MinRatio || 0,
+      lastHourRatio: preResolution.lastHourRatio || 0,
+      preResolutionTrades: preResolution.timing.tradesWithTiming,
       suspicionScore,
       suspicionLevel: level,
       cluster: null,
@@ -105,7 +131,7 @@ async function fetchAndAnalyzeRealData() {
         amount: t.amount,
         price: t.price,
         outcome: t.outcome,
-        timestamp: t.timestamp ? new Date(t.timestamp).toISOString() : null
+        timestamp: t.timestamp ? new Date(t.timestamp * 1000).toISOString() : null
       }))
     });
   }
@@ -119,13 +145,20 @@ async function fetchAndAnalyzeRealData() {
     .filter(w => w.suspicionLevel !== 'low')
     .reduce((sum, w) => sum + w.totalStake, 0);
 
+  // Count wallets with pre-resolution trading
+  const walletsWithPreRes = analyzedWallets.filter(w => w.preResolutionTrades > 0).length;
+  const highPreResWallets = analyzedWallets.filter(w => w.lastMinuteRatio > 0.1).length;
+
   return {
     summary: {
       totalWallets: wallets.length,
       totalTrades: trades.length,
       totalMarkets: new Set(trades.map(t => t.conditionId)).size,
+      resolvedMarketsAnalyzed: resolvedMarkets.length,
       flaggedWallets: flaggedCount,
       criticalWallets: criticalCount,
+      walletsWithPreResolutionTrades: walletsWithPreRes,
+      highPreResolutionWallets: highPreResWallets,
       totalVolume,
       suspiciousVolume,
       suspiciousVolumePercent: totalVolume > 0 ? (suspiciousVolume / totalVolume) * 100 : 0,
